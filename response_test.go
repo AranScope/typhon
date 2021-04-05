@@ -82,6 +82,40 @@ func TestResponseWriter_ContextCanceled(t *testing.T) {
 	assert.Equal(t, err.Error(), "context canceled")
 }
 
+func TestResponseWriter_NilRequestCtx(t *testing.T) {
+	t.Parallel()
+
+	req := Request{
+		Context: nil,
+	}
+
+	r := NewResponse(req)
+	r.Write([]byte("boop"))
+
+	_, err := r.BodyBytes(true)
+
+	// There's no context, so there should be no context cancellation
+	// error and no panic.
+	require.NoError(t, err)
+}
+
+func TestResponseWriter_NilRequest(t *testing.T) {
+	t.Parallel()
+
+	req := Request{
+		Context: nil,
+	}
+
+	r := NewResponse(req)
+	r.Write([]byte("boop"))
+
+	_, err := r.BodyBytes(true)
+
+	// There's no request (and no context), so there should be no context
+	// cancellation error and no panic.
+	require.NoError(t, err)
+}
+
 func TestResponse_WrapDownstreamErrors(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
