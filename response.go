@@ -4,11 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/monzo/terrors"
 	"io"
 	"io/ioutil"
 	"net/http"
-
-	"github.com/monzo/terrors"
 )
 
 // A Response is Typhon's wrapper around http.Response, used by both clients and servers.
@@ -129,20 +128,24 @@ func (r *Response) Write(b []byte) (n int, err error) {
 // BodyBytes fully reads the response body and returns the bytes read. If consume is false, the body is copied into a
 // new buffer such that it may be read again.
 func (r *Response) BodyBytes(consume bool) ([]byte, error) {
-	if consume {
-		if r.Request != nil && r.Request.Context != nil {
-			select {
-			case <-r.Request.Context.Done():
-				// The request context may have already been canceled, which causes the response
-				// body to be closed. In this case we propagate the cancellation and avoid reading the
-				// closed body, which would cause a 'read on closed body' error.
-				return nil, r.Request.Context.Err()
-			default:
-				defer r.Body.Close()
-				return ioutil.ReadAll(r.Body)
-			}
+	if r.Request != nil && r.Request.Context != nil {
+		if r.Request.Context.Err() != nil {
+			// The request context may have already been canceled, which causes the response
+			// body to be closed. In this case we propagate the cancellation and avoid reading the
+			// closed body, which would cause a 'read on closed body' error.
+			//
+			// There's an edge case here, where we could check if the context is cancelled, find
+			// that it isn't, and then the context gets cancelled closing the request body, before
+			// we try to read from it. This is highly unlikely to happen, so we accept this edge case
+			// to avoid needing a mutex.
+			//
+			// Just in case the body wasn't closed for whatever reason, we close it now.
+			r.Body.Close()
+			return nil, r.Request.Context.Err()
 		}
+	}
 
+	if consume {
 		defer r.Body.Close()
 		return ioutil.ReadAll(r.Body)
 	}
