@@ -130,6 +130,19 @@ func (r *Response) Write(b []byte) (n int, err error) {
 // new buffer such that it may be read again.
 func (r *Response) BodyBytes(consume bool) ([]byte, error) {
 	if consume {
+		if r.Request.Context != nil {
+			select {
+			case <-r.Request.Context.Done():
+				// The request context may have already been canceled, which causes the response
+				// body to be closed. In this case we propagate the cancellation and avoid reading the
+				// closed body, which would cause a 'read on closed body' error.
+				return nil, r.Request.Context.Err()
+			default:
+				defer r.Body.Close()
+				return ioutil.ReadAll(r.Body)
+			}
+		}
+
 		defer r.Body.Close()
 		return ioutil.ReadAll(r.Body)
 	}

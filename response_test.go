@@ -55,6 +55,33 @@ func TestResponseWriter_Error(t *testing.T) {
 	assert.Equal(t, "abc", rsp.Error.Error())
 }
 
+func TestResponseWriter_ContextCanceled(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
+
+	req := Request{
+		Context: ctx,
+	}
+
+	r := NewResponse(req)
+	r.Write([]byte("boop"))
+
+	// Cancel the context before the response body is read
+	// This will cause the body to be closed, and a context
+	// canceled error to be returned.
+	cancel()
+
+	_, err := r.BodyBytes(true)
+	require.Error(t, err)
+
+	// We expect the context canceled error to be propagated.
+	// If we saw a 'read on closed body' error, that would indicate
+	// that we're ignoring a canceled context, and attempting to
+	// read the response body anyway.
+	assert.Equal(t, err.Error(), "context canceled")
+}
+
 func TestResponse_WrapDownstreamErrors(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
